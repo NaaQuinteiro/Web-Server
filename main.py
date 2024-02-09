@@ -42,11 +42,11 @@ class MyHandler(SimpleHTTPRequestHandler):
         if self.path == '/login':
             #Tentar abrir o arquivo login
             try:
-                with open(os.path.join(os.getcwd(), 'login.html'), 'r') as login_file:
-                    content = login_file.read() # le o contedo do arquivo login 
+                with open(os.path.join(os.getcwd(), 'login.html'), 'r', encoding='utf-8') as login_file:
+                    content = login_file.read()# le o contedo do arquivo login 
                 
                 self.send_response(200)
-                self.send_header("Content-type", "text/html")
+                self.send_header("Content-type", "text/html; charset=utf-8")
                 self.end_headers()
                 self.wfile.write(content.encode('utf-8')) # escreve o conteudo da página
 
@@ -54,17 +54,36 @@ class MyHandler(SimpleHTTPRequestHandler):
             except FileNotFoundError:
                 pass
         
+        elif self.path == '/login_failed':
+            #responde ao cliente com a mensagem de login/senha incorreta 
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html; charset=utf-8')
+            self.end_headers()
+
+            #le o conteud da página login.html
+            with open(os.path.join(os.getcwd(), 'login.html'), 'r', encoding='utf-8') as login_file:
+                content = login_file.read()
+            
+            #Adiciona a mensagem de erro no conrúdo da página
+                mensagem = 'Login e/ou senha incorretos. Tente novamente'
+                content = content.replace('<!--Mensagem de erro inserida aqui-->', f'<div class="error-message">{mensagem}</div>' )
+
+            #Envia o conteudo modificado para o cliente 
+            self.wfile.write(content.encode('utf-8'))
+                
+            
+        
         else:
             #Se não for a rota "/login", continua com o comportamento padrão
             super().do_GET()
 
-    def usuario_existente(self, login):
+    def usuario_existente(self, login, senha):
         #verifica se o login já existe no arquivo
-        with open ('dados_login.txt', 'r') as file:
+        with open ('dados_login.txt', 'r', encoding='utf-8') as file:
             for line in file:
-                stored_login, _ = line.strip().split(';')
+                stored_login, stored_senha = line.strip().split(';')
                 if login == stored_login:
-                    return True
+                    return senha == stored_senha
         return False
 
     def do_POST(self):
@@ -84,16 +103,13 @@ class MyHandler(SimpleHTTPRequestHandler):
             print("Email:", form_data.get('email', [''][0]))
             print("Senha:", form_data.get('email', [''][0]))
 
-            with open('dados_login.txt', 'a') as file:
-                login = form_data.get('email', [''])[0]
-                senha = form_data.get('senha', [''])[0]
-                file.write(f'{login};{senha}\n')
-
             #verificar se o usuáro já existe:
             login = form_data.get('email',[''])[0]
-            if self.usuario_existente(login):
+            senha = form_data.get('senha',[''])[0]
+
+            if self.usuario_existente(login, senha):
                 #Responde ao cliente indicando que usuário já consta nos registros
-                with open(os.path.join(os.getcwd(), 'usuario_existente.html'), 'r') as usuario_existente_file:
+                with open(os.path.join(os.getcwd(), 'usuario_existente.html'), 'r', encoding='utf-8') as usuario_existente_file:
                     content = usuario_existente_file.read() # le o contedo do arquivo login 
 
                 self.send_response(200)
@@ -102,15 +118,29 @@ class MyHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(content.encode('utf-8'))
 
             else:
-                #Armazena os dados num arquivo txt
-                with open(os.path.join(os.getcwd(), 'resposta.html'), 'r') as resposta_file:
-                        content = resposta_file.read() # le o contedo do arquivo login 
 
-                #Responde ao cliente indicando que os dados foram recebidos e armazenados com sucesso
-                self.send_response(200)
-                self.send_header("Content-type", "text/html")
-                self.end_headers()
-                self.wfile.write(content.encode('utf-8')) # escreve o conteudo da página
+                if any(line.startswith(f'{login};') for line in open('dados_login.txt', 'r', encoding='utf-8')):
+                    #redireciona o cliente para a rota '/login_failed'
+                    self.send_response(302)
+                    self.send_header('Location', '/login_failed')
+                    self.end_headers()
+                    return #Adicionando um return para evitar a execução do restante do código
+
+                else:
+                    #Armazena os dados num arquivo txt
+                    with open('dados_login.txt', 'a') as file:
+                        login = form_data.get('email', [''])[0]
+                        senha = form_data.get('senha', [''])[0]
+                        file.write(f'{login};{senha}\n')
+
+                    with open(os.path.join(os.getcwd(), 'resposta.html'), 'r', encoding='utf-8') as resposta_file:
+                            content = resposta_file.read() # le o contedo do arquivo login 
+
+                    #Responde ao cliente indicando que os dados foram recebidos e armazenados com sucesso
+                    self.send_response(200)
+                    self.send_header("Content-type", "text/html; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(content.encode('utf-8')) # escreve o conteudo da página
 
         else:
             #Se não for a rota definifa, conrinua com o comportamento padrão
